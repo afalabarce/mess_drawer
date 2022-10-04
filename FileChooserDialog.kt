@@ -1,9 +1,8 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package io.github.afalabarce.compose.desktop
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,20 +12,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogState
 import androidx.compose.ui.window.WindowPosition
@@ -35,18 +32,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import java.awt.MouseInfo
 import java.io.File
 
 private data class FileChooserUiState(
     val currentPath: File,
     val firstLoad: Boolean = true,
     val fileSelection: Boolean,
-    val selectedFileOrDirectory: File?
+    val selectedFileOrDirectory: File?,
+    val windowPosition: WindowPosition = WindowPosition(Alignment.Center),
+    val windowMoving: Boolean = false,
+    val firstPosition: Offset? = null
 )
 
 private class FileChooserViewModel: CoroutineScope by CoroutineScope(Dispatchers.IO){
     private val _uiState by lazy { MutableStateFlow(FileChooserUiState(
-        currentPath = File(System.getProperty("user.dir")),
+        currentPath = File(System.getProperty("user.home")),
         firstLoad = true,
         fileSelection = true,
         selectedFileOrDirectory = null
@@ -54,12 +55,28 @@ private class FileChooserViewModel: CoroutineScope by CoroutineScope(Dispatchers
     val uiState: StateFlow<FileChooserUiState>
         get() = this._uiState
 
+    fun close(){
+        this._uiState.update { old -> old.copy(firstPosition = null, currentPath = File(System.getProperty("user.home")), firstLoad = true) }
+    }
+
+    fun setFirstPosition(offsetPosition: Offset?){
+        this._uiState.update { old -> old.copy(firstPosition = offsetPosition) }
+    }
     fun setSelectionType(onlyDirectories: Boolean){
         this._uiState.update { old -> old.copy(fileSelection = !onlyDirectories) }
     }
 
+    fun windowIsMoving(isMoving: Boolean){
+        this._uiState.update { old -> old.copy(windowMoving = isMoving, firstPosition = if (!isMoving) null else old.firstPosition) }
+    }
+
+    fun setNewPosition(offsetPosition: Offset){
+        this._uiState.update { old -> old.copy(windowPosition = WindowPosition(Dp(offsetPosition.x), Dp(offsetPosition.y)), firstPosition = offsetPosition) }
+    }
     fun setNewFolder(folder: File){
-        if (folder.isDirectory){
+        if (folder.name == "File.listRoots"){
+            this._uiState.update { old -> old.copy(currentPath = folder, firstLoad = false) }
+        }else if (folder.isDirectory){
             this._uiState.update { old -> old.copy(currentPath = folder, firstLoad = false) }
         }
     }
@@ -67,8 +84,13 @@ private class FileChooserViewModel: CoroutineScope by CoroutineScope(Dispatchers
     fun selectFileOrDirectory(selected: File?){
         this._uiState.update { old -> old.copy(selectedFileOrDirectory = selected) }
     }
+
+    fun setFirstLoad(value: Boolean) {
+        this._uiState.update { old -> old.copy(firstLoad = value) }
+    }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FileChooserDialog(
     visible: Boolean,
@@ -88,13 +110,21 @@ fun FileChooserDialog(
     val viewModel = remember { FileChooserViewModel() }
     viewModel.setSelectionType(onlyDirectories)
     val uiState by viewModel.uiState.collectAsState()
+    var dialogPosition: WindowPosition by remember { mutableStateOf(WindowPosition(Alignment.Center)) }
+    var dialogOffset: Offset? by remember { mutableStateOf(null) }
 
     if (baseDirectory != null && uiState.firstLoad)
         viewModel.setNewFolder(baseDirectory)
 
+    if (uiState.firstLoad) {
+        dialogPosition = WindowPosition(Alignment.Center)
+        viewModel.setFirstLoad(false)
+    }
+
     Dialog(
         onCloseRequest = { },
-        state = DialogState(position = WindowPosition(Alignment.Center), size = DpSize(800.dp, 600.dp)),
+        transparent = true,
+        state = DialogState(position = dialogPosition, size = DpSize(800.dp, 600.dp)),
         visible = visible,
         resizable = true,
         undecorated = true,
@@ -106,10 +136,51 @@ fun FileChooserDialog(
             border = BorderStroke(width = 2.dp, borderColor),
             backgroundColor = backgroundColor,
         ) {
+
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 topBar = {
-                    TopAppBar(backgroundColor = borderColor) {
+                    TopAppBar(
+                        backgroundColor = borderColor,
+                        // TODO Handle dialog movement
+                        //modifier = Modifier.onPointerEvent(
+                        //    eventType = PointerEventType.Press,
+                        //){ evt ->
+                        //    if (uiState.firstPosition == null) {
+                        //        viewModel.setFirstPosition(
+                        //            Offset(
+                        //                this@Dialog.window.x.toFloat(),
+                        //                this@Dialog.window.y.toFloat()
+                        //            )
+                        //        )
+                        //    }
+                        //    if (dialogOffset == null)
+                        //        dialogOffset = Offset(this@Dialog.window.x.toFloat(), this@Dialog.window.y.toFloat())
+                        //    viewModel.windowIsMoving(true)
+                        //    println("Start Moving!")
+                        //}.onPointerEvent(eventType = PointerEventType.Move){ evt ->
+                        //        if (uiState.windowMoving){
+                        //            val mouseLocation = MouseInfo.getPointerInfo().location
+                        //            try {
+                        //                val xDiff = dialogOffset!!.x - (mouseLocation.x - dialogOffset!!.x)
+                        //                val yDiff = dialogOffset!!.y - (mouseLocation.y - dialogOffset!!.y)
+                        //                val positionX = Dp(dialogOffset!!.x - xDiff)
+                        //                val positionY = Dp(dialogOffset!!.y - yDiff)
+                        //
+                        //                dialogPosition = WindowPosition(
+                        //                    positionX,
+                        //                    positionY
+                        //                )
+                        //            }catch (_: Exception){
+                        //
+                        //            }
+                        //        }
+                        //}.onPointerEvent(eventType = PointerEventType.Release){
+                        //    viewModel.windowIsMoving(false)
+                        //    dialogOffset = null
+                        //    println("Stop Moving!")
+                        //}
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(6.dp),
                             horizontalArrangement = Arrangement.Start,
@@ -125,7 +196,10 @@ fun FileChooserDialog(
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                 IconButton(
                                     modifier = Modifier,
-                                    onClick = { onFileChoosen(null, false) },
+                                    onClick = {
+                                        viewModel.close()
+                                        onFileChoosen(null, false)
+                                    },
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Clear,
@@ -144,9 +218,11 @@ fun FileChooserDialog(
                         FloatingActionButton(
                             onClick = {
                                 if (onlyDirectories){
+                                    viewModel.close()
                                     onFileChoosen(uiState.currentPath, true)
                                 }else {
                                     if (uiState.selectedFileOrDirectory != null) {
+                                        viewModel.close()
                                         onFileChoosen(uiState.selectedFileOrDirectory, true)
                                     }
                                 }
@@ -168,6 +244,7 @@ fun FileChooserDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         FloatingActionButton(
                             onClick = {
+                                viewModel.close()
                                 onFileChoosen(null, false)
                             },
                             modifier = Modifier.height(48.dp),
@@ -199,10 +276,11 @@ fun FileChooserDialog(
                     PathContainer(path = uiState.currentPath, color = borderColor, dotDotColor = dotDotColor) { newFolder ->
                         viewModel.setNewFolder(newFolder)
                     }
+                    val currentPath = uiState.currentPath
                     LazyColumn(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(uiState.currentPath.listFiles()?.filter { x -> (onlyDirectories && x.isDirectory) || !onlyDirectories }?.toTypedArray() ?: arrayOf()) { file ->
+                        items(if (currentPath.name.contains("File.listRoots")) File.listRoots() else currentPath.listFiles()?.filter { x -> (onlyDirectories && x.isDirectory) || !onlyDirectories }?.toTypedArray() ?: arrayOf()) { file ->
                             FileItem(file, file == uiState.selectedFileOrDirectory) {
                                 if (file.isDirectory){
                                     viewModel.setNewFolder(file)
@@ -232,7 +310,7 @@ private fun FileItem(file: File, isSelected: Boolean = false, onClick: (File) ->
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = file.name,
+            text = if (file.name.isNullOrEmpty()) file.absolutePath else file.name,
             fontSize = 12.sp,
             modifier = Modifier.fillMaxWidth()
         )
@@ -240,25 +318,25 @@ private fun FileItem(file: File, isSelected: Boolean = false, onClick: (File) ->
 }
 
 @Composable
-private fun PathContainer(path: File, dotDotColor: Color, color: Color, clickedPath: (File) -> Unit){
-    val dotDot: String = ".."
+private fun PathContainer(path: File, dotDotColor: Color, color: Color, clickedPath: (File) -> Unit) {
+    val dotDot = ".."
     val parentFolder: String = try {
         if (File(path.parent).name == "") File(path.parent).absolutePath else File(path.parent).name
-    }catch (ex: Exception){
+    } catch (ex: Exception) {
         path.absolutePath
     }
-    val currentPath: String = path.name
+    val currentPath: String = if (path.name.contains("File.listRoots")) "" else path.name
 
-    Row (
+    Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
-    ){
+    ) {
         IconButton(
             onClick = {
-                clickedPath(File(System.getProperty("user.dir")))
+                clickedPath(File(System.getProperty("user.home")))
             }
-        ){
+        ) {
             Icon(Icons.Filled.Home, contentDescription = null, tint = color)
         }
         Text(
@@ -271,15 +349,18 @@ private fun PathContainer(path: File, dotDotColor: Color, color: Color, clickedP
             isLeft = false,
             color = dotDotColor,
             text = dotDot
-        ){
+        ) {
             if (currentPath != "")
                 clickedPath(File(path.parent))
+            else if (System.getProperty("os.name").contains("windows", true)) {
+                clickedPath(File("File.listRoots"))
+            }
         }
         ContentTag(
             isLeft = false,
             color = color,
-            text = parentFolder
-        ){
+            text = if (path.name.contains("File.listRoots")) "Unidades" else parentFolder
+        ) {
             if (currentPath != "")
                 clickedPath(File(path.parent))
         }
@@ -288,10 +369,9 @@ private fun PathContainer(path: File, dotDotColor: Color, color: Color, clickedP
                 isLeft = false,
                 color = color,
                 text = currentPath
-            ){
+            ) {
 
             }
-
     }
 }
 
