@@ -140,72 +140,36 @@ fun FileChooserDialog(
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 topBar = {
-                    TopAppBar(
-                        backgroundColor = borderColor,
-                        // TODO Handle dialog movement
-                        //modifier = Modifier.onPointerEvent(
-                        //    eventType = PointerEventType.Press,
-                        //){ evt ->
-                        //    if (uiState.firstPosition == null) {
-                        //        viewModel.setFirstPosition(
-                        //            Offset(
-                        //                this@Dialog.window.x.toFloat(),
-                        //                this@Dialog.window.y.toFloat()
-                        //            )
-                        //        )
-                        //    }
-                        //    if (dialogOffset == null)
-                        //        dialogOffset = Offset(this@Dialog.window.x.toFloat(), this@Dialog.window.y.toFloat())
-                        //    viewModel.windowIsMoving(true)
-                        //    println("Start Moving!")
-                        //}.onPointerEvent(eventType = PointerEventType.Move){ evt ->
-                        //        if (uiState.windowMoving){
-                        //            val mouseLocation = MouseInfo.getPointerInfo().location
-                        //            try {
-                        //                val xDiff = dialogOffset!!.x - (mouseLocation.x - dialogOffset!!.x)
-                        //                val yDiff = dialogOffset!!.y - (mouseLocation.y - dialogOffset!!.y)
-                        //                val positionX = Dp(dialogOffset!!.x - xDiff)
-                        //                val positionY = Dp(dialogOffset!!.y - yDiff)
-                        //
-                        //                dialogPosition = WindowPosition(
-                        //                    positionX,
-                        //                    positionY
-                        //                )
-                        //            }catch (_: Exception){
-                        //
-                        //            }
-                        //        }
-                        //}.onPointerEvent(eventType = PointerEventType.Release){
-                        //    viewModel.windowIsMoving(false)
-                        //    dialogOffset = null
-                        //    println("Stop Moving!")
-                        //}
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(6.dp),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically
+                    WindowDraggableArea {
+                        TopAppBar(
+                            backgroundColor = borderColor,                        
                         ) {
-                            Image(iconImage, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = title,
-                                modifier = Modifier.fillMaxWidth(0.9f),
-                                color = Color.White,
-                            )
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                IconButton(
-                                    modifier = Modifier,
-                                    onClick = {
-                                        viewModel.close()
-                                        onFileChoosen(null, false)
-                                    },
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Clear,
-                                        contentDescription = null,
-                                        tint = Color.Red
-                                    )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(6.dp),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Image(iconImage, contentDescription = null)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = title,
+                                    modifier = Modifier.fillMaxWidth(0.9f),
+                                    color = Color.White,
+                                )
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    IconButton(
+                                        modifier = Modifier,
+                                        onClick = {
+                                            viewModel.close()
+                                            onFileChoosen(null, false)
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Clear,
+                                            contentDescription = null,
+                                            tint = Color.Red
+                                        )
+                                    }
                                 }
                             }
                         }
